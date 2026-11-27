@@ -51,7 +51,7 @@ namespace RGBControl
         private readonly Button findLeds = new Button();
         private readonly System.Windows.Forms.Timer localThemeTimer = new System.Windows.Forms.Timer();
         private ThemeSettings localTheme;
-        private int localFrame;
+        private double localAnimationSeconds;
         private double localCometPosition;
         private long localLastTick;
         private long nextLocalDirectRefresh;
@@ -327,14 +327,14 @@ namespace RGBControl
                     return;
                 }
                 localTheme = settings;
-                localFrame = 0;
+                localAnimationSeconds = 0;
                 localCometPosition = 0;
                 localLastTick = Stopwatch.GetTimestamp();
                 nextLocalDirectRefresh = 0;
                 nextServiceCheck = 0;
                 nextLocalRecovery = localLastTick + 3L * Stopwatch.Frequency;
                 localRecoveryRemaining = 2;
-                localThemeTimer.Interval = settings.Theme == "Comet" ? 25 : 190 - settings.Speed * 14;
+                localThemeTimer.Interval = 1000 / RgbLightingService.TargetFps;
                 localThemeTimer.Start();
                 status.Text = "Playing " + settings.Theme + " while RGB Control is open.";
                 AnimateLocalTheme();
@@ -375,14 +375,14 @@ namespace RGBControl
                 }
                 double seconds = Math.Min(0.25, (now - localLastTick) / (double)Stopwatch.Frequency);
                 localLastTick = now;
+                localAnimationSeconds += seconds;
                 if (localTheme.Theme == "Comet")
                     localCometPosition = (localCometPosition + seconds * (1.2 + localTheme.Speed * 0.7)) %
                         localTheme.LedCount;
-                Color[] pixels = RgbLightingService.MakeFrame(localTheme, localFrame, localCometPosition);
+                Color[] pixels = RgbLightingService.MakeFrame(localTheme, localAnimationSeconds, localCometPosition);
                 bool refresh = now >= nextLocalDirectRefresh;
                 controller.SetPixels(localTheme.Header, pixels, "Auto", localTheme.Brightness, refresh);
                 if (refresh) nextLocalDirectRefresh = Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency;
-                localFrame++;
             }
             catch (Exception error)
             {
@@ -614,7 +614,6 @@ namespace RGBControl
             Array.Copy(report, buffer, report.Length);
             if (!Native.HidD_SetFeature(handle, buffer, buffer.Length))
                 throw new System.ComponentModel.Win32Exception();
-            Thread.Sleep(20);
         }
 
         private void TakeLightingControl(bool force)

@@ -260,6 +260,7 @@ namespace RGBControl
 
     internal sealed class RgbLightingService : ServiceBase
     {
+        internal const int TargetFps = 60;
         private readonly object gate = new object();
         private Thread worker;
         private HidRgbController controller;
@@ -374,10 +375,15 @@ namespace RGBControl
 
         private void Animate()
         {
-            int frame = 0;
+            double animationSeconds = 0;
             bool sentOff = false;
             double cometPosition = 0;
             long lastTick = Stopwatch.GetTimestamp();
+            long fpsWindowStart = lastTick;
+            int framesInWindow = 0;
+            double measuredFps = 0;
+            ThemeSettings settings = null;
+            long nextSettingsRead = 0;
             long nextDirectRefresh = 0;
             string lastDirectRefresh = "pending";
             string lastEffectReset = "pending";
@@ -386,22 +392,34 @@ namespace RGBControl
                 if (suspended)
                 {
                     lastTick = Stopwatch.GetTimestamp();
+                    fpsWindowStart = lastTick;
+                    framesInWindow = 0;
+                    measuredFps = 0;
                     Thread.Sleep(100);
                     continue;
                 }
 
-                ThemeSettings settings;
-                try { settings = ThemeSettings.Load(); }
-                catch (Exception error)
+                if (settings == null || Stopwatch.GetTimestamp() >= nextSettingsRead)
                 {
-                    WriteStatus("Could not read theme settings: " + error.Message);
-                    Thread.Sleep(500);
-                    continue;
+                    try
+                    {
+                        settings = ThemeSettings.Load();
+                        nextSettingsRead = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 10;
+                    }
+                    catch (Exception error)
+                    {
+                        WriteStatus("Could not read theme settings: " + error.Message);
+                        Thread.Sleep(500);
+                        continue;
+                    }
                 }
 
                 if (settings.Theme == "Manual")
                 {
                     lastTick = Stopwatch.GetTimestamp();
+                    fpsWindowStart = lastTick;
+                    framesInWindow = 0;
+                    measuredFps = 0;
                     ReleaseController();
                     WriteStatus("Manual mode. The desktop window controls the LEDs.");
                     sentOff = false;
@@ -411,6 +429,9 @@ namespace RGBControl
                 if (settings.Theme == "Off")
                 {
                     lastTick = Stopwatch.GetTimestamp();
+                    fpsWindowStart = lastTick;
+                    framesInWindow = 0;
+                    measuredFps = 0;
                     if (!sentOff)
                     {
                         sentOff = DarkenAndClose();
@@ -426,9 +447,10 @@ namespace RGBControl
                     long now = Stopwatch.GetTimestamp();
                     double seconds = Math.Min(0.25, (now - lastTick) / (double)Stopwatch.Frequency);
                     lastTick = now;
+                    animationSeconds += seconds;
                     if (settings.Theme == "Comet")
                         cometPosition = (cometPosition + seconds * (1.2 + settings.Speed * 0.7)) % settings.LedCount;
-                    Color[] pixels = MakeFrame(settings, frame, cometPosition);
+                    Color[] pixels = MakeFrame(settings, animationSeconds, cometPosition);
                     bool reassertDirectMode = now >= nextDirectRefresh;
                     bool sentFrame = false;
                     lock (gate)
@@ -454,6 +476,15 @@ namespace RGBControl
                             controller.SetPixels(settings.Header, pixels, "Auto", settings.Brightness,
                                 reassertDirectMode);
                             sentFrame = true;
+                            framesInWindow++;
+                            long frameSentAt = Stopwatch.GetTimestamp();
+                            if (frameSentAt - fpsWindowStart >= Stopwatch.Frequency)
+                            {
+                                measuredFps = framesInWindow * (double)Stopwatch.Frequency /
+                                    (frameSentAt - fpsWindowStart);
+                                framesInWindow = 0;
+                                fpsWindowStart = frameSentAt;
+                            }
                             if (openedController)
                                 lastEffectReset = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                             if (reassertDirectMode)
@@ -461,16 +492,18 @@ namespace RGBControl
                                 nextDirectRefresh = Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency;
                                 lastDirectRefresh = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
                             }
-                            frame++;
                             WriteStatus("Running " + settings.Theme + " on D_LED " + (settings.Header + 1) +
                                 " with " + settings.LedCount + " LED positions. Controller effects cleared at " +
                                 lastEffectReset + "; direct mode refreshed at " + lastDirectRefresh +
+                                ". Sent " + measuredFps.ToString("F1", CultureInfo.InvariantCulture) + " fps" +
                                 ". Recovery reconnects " + recoveryReopensCompleted + "/2. " +
                                 "USB reports sent; LED output is not verified.");
                         }
                     }
                     if (!sentFrame) continue;
-                    Thread.Sleep(settings.Theme == "Comet" ? 25 : 190 - settings.Speed * 14);
+                    double frameMilliseconds = (Stopwatch.GetTimestamp() - now) * 1000.0 / Stopwatch.Frequency;
+                    int waitMilliseconds = (int)Math.Ceiling(1000.0 / TargetFps - frameMilliseconds);
+                    if (waitMilliseconds > 0) Thread.Sleep(waitMilliseconds);
                 }
                 catch (Exception error)
                 {
@@ -494,15 +527,17 @@ namespace RGBControl
             catch { }
         }
 
-        internal static Color[] MakeFrame(ThemeSettings settings, int frame, double cometPosition)
+        internal static Color[] MakeFrame(ThemeSettings settings, double animationSeconds, double cometPosition)
         {
             int count = settings.LedCount;
             Color[] pixels = new Color[count];
+            int twinkleStep = (int)Math.Floor(animationSeconds * (0.5 + settings.Speed * 0.2));
             for (int i = 0; i < count; i++)
             {
                 if (settings.Theme == "Rainbow")
                 {
-                    pixels[i] = Hsv((settings.ThemeColor.GetHue() + i * 360.0 / count + frame * 9) % 360, 1, 1);
+                    pixels[i] = Hsv((settings.ThemeColor.GetHue() + i * 360.0 / count +
+                        animationSeconds * (12 + settings.Speed * 12)) % 360, 1, 1);
                 }
                 else if (settings.Theme == "Comet")
                 {
@@ -514,12 +549,12 @@ namespace RGBControl
                 }
                 else if (settings.Theme == "Ocean")
                 {
-                    double wave = (Math.Sin(i * 0.85 - frame * 0.23) + 1) / 2;
+                    double wave = (Math.Sin(i * 0.85 - animationSeconds * (0.4 + settings.Speed * 0.2)) + 1) / 2;
                     pixels[i] = ScaleColor(settings.ThemeColor, 0.15 + wave * 0.85);
                 }
                 else
                 {
-                    int seed = unchecked(i * 1103515245 + (frame / 4) * 12345);
+                    int seed = unchecked(i * 1103515245 + twinkleStep * 12345);
                     int spark = (seed ^ (seed >> 13)) & 15;
                     pixels[i] = ScaleColor(settings.ThemeColor,
                         spark == 0 ? 1.0 : spark == 1 ? 0.35 : 0.01);
