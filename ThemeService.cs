@@ -24,6 +24,8 @@ namespace RGBControl
         internal int Speed = 5;
         internal int Brightness = 80;
         internal Color ThemeColor = Color.FromArgb(80, 210, 255);
+        internal bool UseSecondCometColor;
+        internal Color CometTrailColor = Color.FromArgb(255, 80, 180);
 
         internal static ThemeSettings Load()
         {
@@ -48,6 +50,10 @@ namespace RGBControl
                 else if (key == "Color" && value.Length == 7 && value[0] == '#' &&
                     int.TryParse(value.Substring(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number))
                     settings.ThemeColor = Color.FromArgb((number >> 16) & 255, (number >> 8) & 255, number & 255);
+                else if (key == "CometTwoColors") settings.UseSecondCometColor = value == "1";
+                else if (key == "CometTrailColor" && value.Length == 7 && value[0] == '#' &&
+                    int.TryParse(value.Substring(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out number))
+                    settings.CometTrailColor = Color.FromArgb((number >> 16) & 255, (number >> 8) & 255, number & 255);
             }
             return settings;
         }
@@ -67,7 +73,10 @@ namespace RGBControl
                 "\r\nSpeed=" + Speed.ToString(CultureInfo.InvariantCulture) +
                 "\r\nBrightness=" + Brightness.ToString(CultureInfo.InvariantCulture) +
                 "\r\nColor=" + string.Format(CultureInfo.InvariantCulture, "#{0:X2}{1:X2}{2:X2}",
-                    ThemeColor.R, ThemeColor.G, ThemeColor.B) + "\r\n";
+                    ThemeColor.R, ThemeColor.G, ThemeColor.B) +
+                "\r\nCometTwoColors=" + (UseSecondCometColor ? "1" : "0") +
+                "\r\nCometTrailColor=" + string.Format(CultureInfo.InvariantCulture, "#{0:X2}{1:X2}{2:X2}",
+                    CometTrailColor.R, CometTrailColor.G, CometTrailColor.B) + "\r\n";
             try
             {
                 File.WriteAllText(temporary, content, new UTF8Encoding(false));
@@ -139,15 +148,19 @@ namespace RGBControl
         private readonly NumericUpDown brightness = new NumericUpDown();
         private readonly Label status = new Label();
         private readonly Button colorButton = new Button();
+        private readonly CheckBox cometTwoColors = new CheckBox();
+        private readonly Button trailColorButton = new Button();
+        private readonly Label trailHelp = new Label();
         private readonly Action settingsSaved;
         private Color selectedColor = Color.FromArgb(80, 210, 255);
+        private Color selectedTrailColor = Color.FromArgb(255, 80, 180);
 
         internal ThemeForm(Action onSettingsSaved)
         {
             settingsSaved = onSettingsSaved;
             Text = "Dynamic lighting themes";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            ClientSize = new Size(420, 390);
+            ClientSize = new Size(420, 485);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
@@ -156,6 +169,7 @@ namespace RGBControl
             theme.SetBounds(20, 45, 380, 25);
             theme.DropDownStyle = ComboBoxStyle.DropDownList;
             theme.Items.AddRange(new object[] { "Rainbow", "Comet", "Ocean", "Twinkle", "Manual", "Off" });
+            theme.SelectedIndexChanged += delegate { UpdateCometControls(); };
             Controls.Add(theme);
 
             AddLabel("ARGB header", 20, 85, 110);
@@ -200,12 +214,25 @@ namespace RGBControl
             colorHelp.Text = "Rainbow uses this as its starting hue; other themes use the color directly.";
             Controls.Add(colorHelp);
 
+            cometTwoColors.SetBounds(20, 295, 380, 25);
+            cometTwoColors.Text = "Use a second color for the Comet trail";
+            cometTwoColors.CheckedChanged += delegate { UpdateCometControls(); };
+            Controls.Add(cometTwoColors);
+            trailColorButton.SetBounds(20, 325, 145, 34);
+            trailColorButton.Text = "Pick trail color";
+            trailColorButton.FlatStyle = FlatStyle.Flat;
+            trailColorButton.Click += delegate { PickTrailColor(); };
+            Controls.Add(trailColorButton);
+            trailHelp.SetBounds(180, 325, 220, 40);
+            trailHelp.Text = "The head uses the theme color; its tail fades through this color.";
+            Controls.Add(trailHelp);
+
             Button save = new Button();
-            save.SetBounds(20, 300, 165, 32);
+            save.SetBounds(20, 390, 165, 32);
             save.Text = "Save and apply";
             save.Click += delegate { SaveSettings(); };
             Controls.Add(save);
-            status.SetBounds(20, 345, 380, 40);
+            status.SetBounds(20, 435, 380, 40);
             status.Text = ThemeSettings.IsServiceRunning()
                 ? "Service is running. Changes apply within a second."
                 : "App only: themes play while RGB Control is open.";
@@ -221,6 +248,8 @@ namespace RGBControl
                 speed.Value = current.Speed;
                 brightness.Value = current.Brightness;
                 selectedColor = current.ThemeColor;
+                selectedTrailColor = current.CometTrailColor;
+                cometTwoColors.Checked = current.UseSecondCometColor;
             }
             catch (Exception error)
             {
@@ -231,7 +260,9 @@ namespace RGBControl
                 brightness.Value = 80;
                 status.Text = error.Message;
             }
-            UpdateColorButton();
+            UpdateColorButton(colorButton, selectedColor);
+            UpdateColorButton(trailColorButton, selectedTrailColor);
+            UpdateCometControls();
         }
 
         private void AddLabel(string value, int x, int y, int width)
@@ -242,11 +273,19 @@ namespace RGBControl
             Controls.Add(label);
         }
 
-        private void UpdateColorButton()
+        private static void UpdateColorButton(Button button, Color color)
         {
-            colorButton.BackColor = selectedColor;
-            colorButton.ForeColor = (selectedColor.R * 299 + selectedColor.G * 587 + selectedColor.B * 114) / 1000 < 128
+            button.BackColor = color;
+            button.ForeColor = (color.R * 299 + color.G * 587 + color.B * 114) / 1000 < 128
                 ? Color.White : Color.Black;
+        }
+
+        private void UpdateCometControls()
+        {
+            bool cometSelected = theme.Text == "Comet";
+            cometTwoColors.Enabled = cometSelected;
+            trailColorButton.Enabled = cometSelected && cometTwoColors.Checked;
+            trailHelp.Enabled = cometSelected;
         }
 
         private void PickThemeColor()
@@ -257,7 +296,20 @@ namespace RGBControl
                 if (dialog.ShowDialog(this) == DialogResult.OK)
                 {
                     selectedColor = dialog.Color;
-                    UpdateColorButton();
+                    UpdateColorButton(colorButton, selectedColor);
+                }
+            }
+        }
+
+        private void PickTrailColor()
+        {
+            using (ColorDialog dialog = new ColorDialog())
+            {
+                dialog.Color = selectedTrailColor;
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    selectedTrailColor = dialog.Color;
+                    UpdateColorButton(trailColorButton, selectedTrailColor);
                 }
             }
         }
@@ -273,6 +325,8 @@ namespace RGBControl
                 settings.Speed = (int)speed.Value;
                 settings.Brightness = (int)brightness.Value;
                 settings.ThemeColor = selectedColor;
+                settings.UseSecondCometColor = cometTwoColors.Checked;
+                settings.CometTrailColor = selectedTrailColor;
                 settings.Save();
                 if (settingsSaved != null) settingsSaved();
                 if (settings.Theme == "Manual")
@@ -598,13 +652,23 @@ namespace RGBControl
                 else if (settings.Theme == "Comet")
                 {
                     double glow = 0;
+                    double bestDistance = 0;
                     for (int wrap = -1; wrap <= 1; wrap++)
                     {
                         double distance = cometPosition - i + wrap * count;
                         double width = distance >= 0 ? 1.7 : 0.65;
-                        glow = Math.Max(glow, Math.Exp(-0.5 * Math.Pow(distance / width, 2)));
+                        double candidate = Math.Exp(-0.5 * Math.Pow(distance / width, 2));
+                        if (candidate > glow)
+                        {
+                            glow = candidate;
+                            bestDistance = distance;
+                        }
                     }
-                    pixels[i] = ScaleColor(settings.ThemeColor, 0.01 + 0.99 * glow);
+                    Color cometColor = settings.UseSecondCometColor
+                        ? BlendColors(settings.ThemeColor, settings.CometTrailColor,
+                            Math.Min(1.0, Math.Max(0, bestDistance / 2.0)))
+                        : settings.ThemeColor;
+                    pixels[i] = ScaleColor(cometColor, 0.01 + 0.99 * glow);
                 }
                 else if (settings.Theme == "Ocean")
                 {
@@ -642,6 +706,14 @@ namespace RGBControl
         {
             return Color.FromArgb((int)Math.Round(color.R * level),
                 (int)Math.Round(color.G * level), (int)Math.Round(color.B * level));
+        }
+
+        private static Color BlendColors(Color first, Color second, double amount)
+        {
+            return Color.FromArgb(
+                (int)Math.Round(first.R + (second.R - first.R) * amount),
+                (int)Math.Round(first.G + (second.G - first.G) * amount),
+                (int)Math.Round(first.B + (second.B - first.B) * amount));
         }
     }
 }
