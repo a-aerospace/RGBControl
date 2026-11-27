@@ -9,4 +9,5 @@ service-status.txt
 .vs/
 bin/
 obj/
+__pycache__/
 .local/

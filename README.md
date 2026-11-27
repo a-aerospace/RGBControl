@@ -1,12 +1,14 @@
 # RGBControl
 
+![RGBControl rainbow fan icon](assets/RGBControl.svg)
+
 RGBControl controls lighting on compatible Gigabyte motherboard USB RGB controllers. The Windows app can set static colors, address individual LEDs on D_LED headers, and play moving themes without OpenRGB, RGB Fusion, Python, a third-party driver, or an account. It makes no network requests.
 
 The app has been tested on a Gigabyte B760M Gaming Plus WiFi DDR4 motherboard with an `IT5701-GIGABYTE` controller (USB hardware ID `048D:5702`) and a Thermalright Aqua Elite 360 V3 ARGB cooler. Other hardware is untested. RGBControl connects only to a controller reporting the expected hardware ID and identity.
 
 ## Install on Windows
 
-1. From [Releases](https://github.com/a-aerospace/RGBControl/releases/latest), download `RGBControl-Setup-0.2.0.exe` and run it. This one file contains the app and installer; it does not need an extracted ZIP or separate script.
+1. From [Releases](https://github.com/a-aerospace/RGBControl/releases/latest), download `RGBControl-Setup-0.2.1.exe` and run it. This one file contains the app and installer; it does not need an extracted ZIP or separate script.
 2. Read the installer page explaining what RGBControl does and what it can access.
 3. Keep **Install the background service** checked for themes at Windows startup and lighting control during sleep, hibernation, and shutdown. Uncheck it for **app only**: themes play while the RGB Control window is open, with no background service. The separate **Create a desktop shortcut** box is optional and starts unchecked.
 4. Open **RGB Control** from the Start menu. Choose a theme in **Dynamic themes...** and click **Save and apply**.
@@ -28,7 +30,7 @@ The cooler's lighting connector must use a compatible 3-pin 5V D_LED header. The
 
 ## Build from source
 
-On Windows, run `build_windows.bat` to compile `RGBControl.exe` using the .NET Framework C# compiler. Install [Inno Setup 6](https://jrsoftware.org/inno-setup/downloads) and compile `RGBControl.iss` with `ISCC.exe` to make the single-file installer. The GitHub Actions workflow builds both on a Windows runner, verifies service and app-only installation, and publishes `RGBControl-Setup-0.2.0.exe` as the release asset. The local `RGBControl.exe` and generated installer are ignored by Git.
+On Windows, run `build_windows.bat` to compile `RGBControl.exe` using the .NET Framework C# compiler. Install [Inno Setup 6](https://jrsoftware.org/inno-setup/downloads) and compile `RGBControl.iss` with `ISCC.exe` to make the single-file installer. The GitHub Actions workflow builds both on a Windows runner, verifies service and app-only installation, and publishes `RGBControl-Setup-0.2.1.exe` as the release asset. The local `RGBControl.exe` and generated installer are ignored by Git. The icon source is in `assets/RGBControl.svg`; `python3 tools/generate_icon.py` regenerates the `.ico` and preview PNG using only the Python standard library.
 
 Legacy `install_service.bat` and `uninstall_service.bat` remain in source for existing users of the previous ZIP release. New users should use the installer executable.
 

@@ -116,6 +116,7 @@ namespace RGBControl
         {
             settingsSaved = onSettingsSaved;
             Text = "Dynamic lighting themes";
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             ClientSize = new Size(420, 390);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;

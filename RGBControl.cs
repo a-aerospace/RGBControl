@@ -63,6 +63,7 @@ namespace RGBControl
         internal MainForm()
         {
             Text = "RGB Control — Gigabyte direct USB";
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             ClientSize = new Size(560, 685);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
