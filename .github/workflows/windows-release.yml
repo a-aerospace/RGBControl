@@ -30,11 +30,38 @@ jobs:
           if (-not $iscc) { throw 'Inno Setup 6 compiler was not found on the Windows runner.' }
           & $iscc RGBControl.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-          if (-not (Test-Path 'dist\RGBControl-Setup-0.2.0.exe')) { throw 'Installer executable was not created.' }
+          if (-not (Test-Path 'dist\RGBControl-Setup-0.2.1.exe')) { throw 'Installer executable was not created.' }
+      - name: Verify embedded icons
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          function Assert-ColorfulIcon([string] $path) {
+            $icon = [System.Drawing.Icon]::ExtractAssociatedIcon((Resolve-Path $path).Path)
+            if (-not $icon) { throw "No icon found in $path" }
+            try {
+              $bitmap = $icon.ToBitmap()
+              try {
+                $red = $green = $blue = 0
+                for ($y = 0; $y -lt $bitmap.Height; $y++) {
+                  for ($x = 0; $x -lt $bitmap.Width; $x++) {
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    if ($pixel.R -gt ($pixel.G + 50) -and $pixel.R -gt ($pixel.B + 50)) { $red++ }
+                    if ($pixel.G -gt ($pixel.R + 30) -and $pixel.G -gt ($pixel.B + 10)) { $green++ }
+                    if ($pixel.B -gt ($pixel.R + 50) -and $pixel.B -gt ($pixel.G + 15)) { $blue++ }
+                  }
+                }
+                if ($red -lt 2 -or $green -lt 2 -or $blue -lt 2) {
+                  throw "The RGB icon is missing from $path"
+                }
+              } finally { $bitmap.Dispose() }
+            } finally { $icon.Dispose() }
+          }
+          Assert-ColorfulIcon 'RGBControl.exe'
+          Assert-ColorfulIcon 'dist\RGBControl-Setup-0.2.1.exe'
       - name: Verify service and app-only installation
         shell: pwsh
         run: |
-          $setup = (Resolve-Path 'dist\RGBControl-Setup-0.2.0.exe').Path
+          $setup = (Resolve-Path 'dist\RGBControl-Setup-0.2.1.exe').Path
           $startMenu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\RGB Control.lnk'
           $desktop = Join-Path $env:PUBLIC 'Desktop\RGB Control.lnk'
           $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
@@ -66,8 +93,8 @@ jobs:
           Run-Uninstall
       - uses: actions/upload-artifact@v4
         with:
-          name: RGBControl-Setup-0.2.0
-          path: dist/RGBControl-Setup-0.2.0.exe
+          name: RGBControl-Setup-0.2.1
+          path: dist/RGBControl-Setup-0.2.1.exe
           if-no-files-found: error
 
   release:
@@ -79,7 +106,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: RGBControl-Setup-0.2.0
+          name: RGBControl-Setup-0.2.1
           path: dist
       - name: Publish GitHub release
         env:
@@ -87,7 +114,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Setup-0.2.0.exe --verify-tag --generate-notes
-          elif ! gh release view v0.2.0 >/dev/null 2>&1; then
-            gh release create v0.2.0 dist/RGBControl-Setup-0.2.0.exe --target "$GITHUB_SHA" --generate-notes
+            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Setup-0.2.1.exe --verify-tag --generate-notes
+          elif ! gh release view v0.2.1 >/dev/null 2>&1; then
+            gh release create v0.2.1 dist/RGBControl-Setup-0.2.1.exe --target "$GITHUB_SHA" --generate-notes
           fi

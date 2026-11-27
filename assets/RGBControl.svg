@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="RGBControl rainbow fan icon">
+  <defs><radialGradient id="tile"><stop stop-color="#1b334f"/><stop offset="1" stop-color="#0a1121"/></radialGradient></defs>
+  <rect x="12" y="12" width="232" height="232" rx="46" fill="url(#tile)"/>
+  <circle cx="128" cy="128" r="111" fill="#1c293e"/>
+  <path d="M134.208 39.217 A89 89 0 0 1 201.784 78.232" fill="none" stroke="#ff5e6d" stroke-width="28"/>
+  <path d="M207.993 88.985 A89 89 0 0 1 207.993 167.015" fill="none" stroke="#ffa344" stroke-width="28"/>
+  <path d="M201.784 177.768 A89 89 0 0 1 134.208 216.783" fill="none" stroke="#ffde5b" stroke-width="28"/>
+  <path d="M121.792 216.783 A89 89 0 0 1 54.216 177.768" fill="none" stroke="#53e099" stroke-width="28"/>
+  <path d="M48.007 167.015 A89 89 0 0 1 48.007 88.985" fill="none" stroke="#49c7f7" stroke-width="28"/>
+  <path d="M54.216 78.232 A89 89 0 0 1 121.792 39.217" fill="none" stroke="#ab7cff" stroke-width="28"/>
+  <circle cx="128" cy="128" r="67" fill="#233249"/>
+  <circle cx="128" cy="128" r="57" fill="#172438"/>
+  <polygon points="121.000,115.000 101.000,81.000 108.000,71.000 136.000,78.000 150.000,99.000 136.000,114.000" fill="#e5f1fc"/>
+  <polygon points="142.758,128.438 182.203,128.117 187.363,139.179 167.301,159.928 142.115,161.553 136.124,141.928" fill="#e5f1fc"/>
+  <polygon points="120.242,140.562 100.797,174.883 88.637,173.821 80.699,146.072 91.885,123.447 111.876,128.072" fill="#e5f1fc"/>
+  <circle cx="128" cy="128" r="14" fill="#172438"/>
+  <circle cx="128" cy="128" r="7" fill="#e5f1fc"/>
+</svg>

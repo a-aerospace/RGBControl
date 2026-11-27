@@ -1,4 +1,4 @@
-#define AppVersion "0.2.0"
+#define AppVersion "0.2.1"
 
 [Setup]
 AppId={{df696067-e8a3-486c-bf67-2a22f4212997}
@@ -16,6 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 WizardStyle=modern
+SetupIconFile=RGBControl.ico
 LicenseFile=LICENSE
 InfoBeforeFile=installer-info.txt
 Uninstallable=yes

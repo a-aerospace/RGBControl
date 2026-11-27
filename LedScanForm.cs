@@ -22,6 +22,7 @@ namespace RGBControl
         {
             controller = connectedController;
             Text = "Find addressable LEDs";
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             ClientSize = new Size(465, 345);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
