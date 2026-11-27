@@ -8,7 +8,7 @@ The app has been tested on a Gigabyte B760M Gaming Plus WiFi DDR4 motherboard wi
 
 ## Install on Windows
 
-1. From [Releases](https://github.com/a-aerospace/RGBControl/releases/latest), download `RGBControl-Setup-0.2.2.exe` and run it. This one file contains the app and installer; it does not need an extracted ZIP or separate script.
+1. From [Releases](https://github.com/a-aerospace/RGBControl/releases/latest), download `RGBControl-Setup-0.2.3.exe` and run it. This one file contains the app and installer; it does not need an extracted ZIP or separate script.
 2. Read the installer page explaining what RGBControl does and what it can access.
 3. Keep **Install the background service** checked for themes at Windows startup and lighting control during sleep, hibernation, and shutdown. Uncheck it for **app only**: themes play while the RGB Control window is open, with no background service. The separate **Create a desktop shortcut** box is optional and starts unchecked.
 4. Open **RGB Control** from the Start menu. Choose a theme in **Dynamic themes...** and click **Save and apply**.
@@ -24,13 +24,13 @@ RGBControl reads the compatible USB lighting controller's identity and color cal
 - **Six-color pattern:** Pick six colors and click **Apply six colors** on D_LED 1 or D_LED 2. The colors can repeat or form six sections.
 - **Find LED count:** Click **Find LED count...** to light one address at a time. Save the last visible address as the LED count for themes. A splitter can make several fans show the same address, so this finds independently controllable positions on the signal rather than every physical LED.
 
-The service writes its latest status and measured frame rate to `%ProgramData%\RGBControl\service-status.txt`. This confirms USB reports were sent; it cannot confirm what the LEDs visibly display. In app-only mode, no service status file is updated.
+The service writes its latest status, measured frame rate, and longest recent frame gap to `%ProgramData%\RGBControl\service-status.txt`. This confirms USB reports were sent; it cannot confirm what the LEDs visibly display. In app-only mode, no service status file is updated.
 
 The cooler's lighting connector must use a compatible 3-pin 5V D_LED header. The [Gigabyte motherboard manual](https://download.gigabyte.com/FileList/Manual/mb_manual_b760m-series_1004_e.pdf) distinguishes this from a 12V LED_C header. Fan power is separate.
 
 ## Build from source
 
-On Windows, run `build_windows.bat` to compile `RGBControl.exe` using the .NET Framework C# compiler. Install [Inno Setup 6](https://jrsoftware.org/inno-setup/downloads) and compile `RGBControl.iss` with `ISCC.exe` to make the single-file installer. The GitHub Actions workflow builds both on a Windows runner, verifies service and app-only installation, and publishes `RGBControl-Setup-0.2.2.exe` as the release asset. The local `RGBControl.exe` and generated installer are ignored by Git. The icon source is in `assets/RGBControl.svg`; `python3 tools/generate_icon.py` regenerates the `.ico` and preview PNG using only the Python standard library.
+On Windows, run `build_windows.bat` to compile `RGBControl.exe` using the .NET Framework C# compiler. Install [Inno Setup 6](https://jrsoftware.org/inno-setup/downloads) and compile `RGBControl.iss` with `ISCC.exe` to make the single-file installer. The GitHub Actions workflow builds both on a Windows runner, verifies service and app-only installation, and publishes `RGBControl-Setup-0.2.3.exe` as the release asset. The local `RGBControl.exe` and generated installer are ignored by Git. The icon source is in `assets/RGBControl.svg`; `python3 tools/generate_icon.py` regenerates the `.ico` and preview PNG using only the Python standard library.
 
 Legacy `install_service.bat` and `uninstall_service.bat` remain in source for existing users of the previous ZIP release. New users should use the installer executable.
 

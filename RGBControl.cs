@@ -730,12 +730,13 @@ namespace RGBControl
             }
 
             byte effectMask = (byte)(1 << stripIndex);
-            if (reassertDirectMode || (disabledStripEffects & effectMask) == 0)
+            bool enteringDirectMode = (disabledStripEffects & effectMask) == 0;
+            if (reassertDirectMode || enteringDirectMode)
             {
                 byte newEffectMask = (byte)(disabledStripEffects | effectMask);
                 Send(new byte[] { ReportId, 0x32, newEffectMask });
                 disabledStripEffects = newEffectMask;
-                Thread.Sleep(50);
+                if (enteringDirectMode) Thread.Sleep(50);
             }
 
             for (int start = 0; start < pixels.Length; start += 19)
