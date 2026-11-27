@@ -92,11 +92,11 @@ namespace RGBControl
 
         internal static void PauseServiceForManual()
         {
-            if (!IsServiceRunning()) return;
+            bool serviceWasRunning = IsServiceRunning();
             ThemeSettings settings = Load();
             settings.Theme = "Manual";
             settings.Save();
-            Thread.Sleep(350);
+            if (serviceWasRunning) Thread.Sleep(350);
         }
     }
 
@@ -109,10 +109,12 @@ namespace RGBControl
         private readonly NumericUpDown brightness = new NumericUpDown();
         private readonly Label status = new Label();
         private readonly Button colorButton = new Button();
+        private readonly Action settingsSaved;
         private Color selectedColor = Color.FromArgb(80, 210, 255);
 
-        internal ThemeForm()
+        internal ThemeForm(Action onSettingsSaved)
         {
+            settingsSaved = onSettingsSaved;
             Text = "Dynamic lighting themes";
             ClientSize = new Size(420, 390);
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -175,7 +177,7 @@ namespace RGBControl
             status.SetBounds(20, 345, 380, 40);
             status.Text = ThemeSettings.IsServiceRunning()
                 ? "Service is running. Changes apply within a second."
-                : "Service is not running. Install it to play themes at boot.";
+                : "App only: themes play while RGB Control is open.";
             Controls.Add(status);
 
             try
@@ -241,9 +243,15 @@ namespace RGBControl
                 settings.Brightness = (int)brightness.Value;
                 settings.ThemeColor = selectedColor;
                 settings.Save();
-                status.Text = ThemeSettings.IsServiceRunning()
-                    ? "Saved. The service will apply this theme shortly."
-                    : "Saved. Install and start the service to play it.";
+                if (settingsSaved != null) settingsSaved();
+                if (settings.Theme == "Manual")
+                    status.Text = "Saved. Use the main window to control the lights.";
+                else if (settings.Theme == "Off")
+                    status.Text = "Saved. Lights will be turned off.";
+                else
+                    status.Text = ThemeSettings.IsServiceRunning()
+                        ? "Saved. The service will apply this theme shortly."
+                        : "Saved. The app will play this theme while it is open.";
             }
             catch (Exception error) { status.Text = error.Message; }
         }
@@ -485,7 +493,7 @@ namespace RGBControl
             catch { }
         }
 
-        private static Color[] MakeFrame(ThemeSettings settings, int frame, double cometPosition)
+        internal static Color[] MakeFrame(ThemeSettings settings, int frame, double cometPosition)
         {
             int count = settings.LedCount;
             Color[] pixels = new Color[count];

@@ -18,17 +18,56 @@ jobs:
       - name: Build Windows executable
         shell: cmd
         run: call build_windows.bat
-      - name: Package Windows download
+      - name: Build Windows installer
         shell: pwsh
         run: |
-          $package = Join-Path $env:RUNNER_TEMP 'RGBControl'
-          New-Item -ItemType Directory -Path $package -Force | Out-Null
-          Copy-Item RGBControl.exe, install_service.bat, uninstall_service.bat, INSTALL.txt, LICENSE -Destination $package
-          Compress-Archive -Path $package -DestinationPath RGBControl-Windows.zip
+          $candidates = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { $iscc = (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source }
+          if (-not $iscc) { throw 'Inno Setup 6 compiler was not found on the Windows runner.' }
+          & $iscc RGBControl.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path 'dist\RGBControl-Setup-0.2.0.exe')) { throw 'Installer executable was not created.' }
+      - name: Verify service and app-only installation
+        shell: pwsh
+        run: |
+          $setup = (Resolve-Path 'dist\RGBControl-Setup-0.2.0.exe').Path
+          $startMenu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\RGB Control.lnk'
+          $desktop = Join-Path $env:PUBLIC 'Desktop\RGB Control.lnk'
+          $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          function Run-Setup([string[]] $options) {
+            $process = Start-Process -FilePath $setup -ArgumentList $options -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+          }
+          function Run-Uninstall {
+            $uninstaller = Get-ChildItem (Join-Path $env:ProgramFiles 'RGBControl\unins*.exe') | Select-Object -First 1
+            if (-not $uninstaller) { throw 'Uninstaller was not registered.' }
+            $process = Start-Process -FilePath $uninstaller.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Uninstaller exited with $($process.ExitCode)" }
+            for ($i = 0; $i -lt 30 -and (Get-Service RGBControlService -ErrorAction SilentlyContinue); $i++) {
+              Start-Sleep -Milliseconds 500
+            }
+            if (Get-Service RGBControlService -ErrorAction SilentlyContinue) { throw 'Service remained after uninstall.' }
+          }
+          Run-Setup -options @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=service')
+          if ((Get-Service RGBControlService).Status -ne 'Running') { throw 'Service did not start.' }
+          if (-not (Test-Path $startMenu)) { throw 'Start menu shortcut is missing.' }
+          if (Test-Path $desktop) { throw 'Desktop shortcut was created without opt-in.' }
+          if (-not (Get-ItemProperty $uninstallKey | Where-Object DisplayName -eq 'RGBControl')) { throw 'Windows uninstall entry is missing.' }
+          Run-Uninstall
+          Run-Setup -options @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=desktopicon')
+          if (Get-Service RGBControlService -ErrorAction SilentlyContinue) { throw 'App-only install created a service.' }
+          if (-not (Test-Path $startMenu)) { throw 'App-only Start menu shortcut is missing.' }
+          if (-not (Test-Path $desktop)) { throw 'Opt-in desktop shortcut is missing.' }
+          if (-not (Get-ItemProperty $uninstallKey | Where-Object DisplayName -eq 'RGBControl')) { throw 'App-only uninstall entry is missing.' }
+          Run-Uninstall
       - uses: actions/upload-artifact@v4
         with:
-          name: RGBControl-Windows
-          path: RGBControl-Windows.zip
+          name: RGBControl-Setup-0.2.0
+          path: dist/RGBControl-Setup-0.2.0.exe
           if-no-files-found: error
 
   release:
@@ -40,7 +79,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: RGBControl-Windows
+          name: RGBControl-Setup-0.2.0
           path: dist
       - name: Publish GitHub release
         env:
@@ -48,7 +87,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Windows.zip --verify-tag --generate-notes
-          elif ! gh release view v0.1.0 >/dev/null 2>&1; then
-            gh release create v0.1.0 dist/RGBControl-Windows.zip --target "$GITHUB_SHA" --generate-notes
+            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Setup-0.2.0.exe --verify-tag --generate-notes
+          elif ! gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release create v0.2.0 dist/RGBControl-Setup-0.2.0.exe --target "$GITHUB_SHA" --generate-notes
           fi

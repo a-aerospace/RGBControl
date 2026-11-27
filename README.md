@@ -1,40 +1,39 @@
 # RGBControl
 
-RGBControl is a Windows desktop app and background service for the Gigabyte RGB Fusion 2 USB lighting controller. It controls static colors and individual LEDs on D_LED addressable headers without OpenRGB, RGB Fusion, Python, a third-party driver, or an account. It does not send network requests.
+RGBControl controls lighting on compatible Gigabyte motherboard USB RGB controllers. The Windows app can set static colors, address individual LEDs on D_LED headers, and play moving themes without OpenRGB, RGB Fusion, Python, a third-party driver, or an account. It makes no network requests.
 
-The app has been tested on a Gigabyte B760M Gaming Plus WiFi DDR4 motherboard with an `IT5701-GIGABYTE` controller (USB hardware ID `048D:5702`) and a Thermalright Aqua Elite 360 V3 ARGB cooler. Other boards, controllers, and coolers are untested. The app connects only to a controller that reports the expected hardware ID and identity.
+The app has been tested on a Gigabyte B760M Gaming Plus WiFi DDR4 motherboard with an `IT5701-GIGABYTE` controller (USB hardware ID `048D:5702`) and a Thermalright Aqua Elite 360 V3 ARGB cooler. Other hardware is untested. RGBControl connects only to a controller reporting the expected hardware ID and identity.
 
 ## Install on Windows
 
-1. Open this repository's **Releases** page and download `RGBControl-Windows.zip` from the latest release. Download the ZIP asset, not GitHub's source-code ZIP.
-2. Extract the entire ZIP to a local folder.
-3. Double-click `install_service.bat` in the extracted `RGBControl` folder and accept the Windows administrator prompt.
-4. Open **RGB Control** from the Start menu. Click **Dynamic themes...**, choose a theme, and click **Save and apply**.
+1. From [Releases](https://github.com/a-aerospace/RGBControl/releases/latest), download `RGBControl-Setup-0.2.0.exe` and run it. This one file contains the app and installer; it does not need an extracted ZIP or separate script.
+2. Read the installer page explaining what RGBControl does and what it can access.
+3. Keep **Install the background service** checked for themes at Windows startup and lighting control during sleep, hibernation, and shutdown. Uncheck it for **app only**: themes play while the RGB Control window is open, with no background service. The separate **Create a desktop shortcut** box is optional and starts unchecked.
+4. Open **RGB Control** from the Start menu. Choose a theme in **Dynamic themes...** and click **Save and apply**.
 
-The installer copies one `RGBControl.exe` to Program Files and registers `RGBControlService` to start with Windows. Windows needs .NET Framework 4.x to run the app. No Python or OpenRGB installation is needed. The release is unsigned, so Windows may identify the publisher as unknown.
+The installer puts the executable in `%ProgramFiles%\RGBControl`, creates a Start menu shortcut, and stores theme settings and service status in `%ProgramData%\RGBControl`. If selected, the service runs as Windows LocalSystem so it can control lighting before sign-in. The installer uses administrator access to write to Program Files and register or remove the service. It appears in **Windows Settings → Apps → Installed apps** as **RGBControl**, where it can be uninstalled. Theme settings are retained after uninstall so a later installation can reuse them.
 
-To update, download and extract a newer release, then run its `install_service.bat` again. To remove the app and service, double-click `uninstall_service.bat` from an extracted release. Theme settings remain in `%ProgramData%\RGBControl` so a later installation can reuse them.
+RGBControl reads the compatible USB lighting controller's identity and color calibration and sends lighting commands to its connected RGB headers. It can turn those lights on or off. It does not control fan or pump speed, use the internet, collect telemetry, or require an account. The release is unsigned, so Windows may show an unknown publisher notice. Windows needs .NET Framework 4.x to run the app.
 
 ## Use
 
-- **Dynamic themes:** Rainbow, Comet, Ocean, and Twinkle. Choose a color, speed, brightness, ARGB header, and LED count. The service applies the saved theme at startup and after wake.
-- **Static color:** Click **Connect**, choose a motherboard lighting channel or **All channels**, pick a color, and click **Apply color**. Manual controls pause the service's animation until you save a dynamic theme again.
+- **Dynamic themes:** Rainbow, Comet, Ocean, and Twinkle. Choose a color, speed, brightness, ARGB header, and LED count. With the service, themes continue after closing the app and resume after wake. In app-only mode they play while the app window is open.
+- **Static color:** Click **Connect**, select a lighting channel or **All channels**, pick a color, and click **Apply color**. Manual controls pause a running theme until you save a dynamic theme again.
 - **Six-color pattern:** Pick six colors and click **Apply six colors** on D_LED 1 or D_LED 2. The colors can repeat or form six sections.
-- **Find LED count:** Click **Find LED count...** to light one address at a time. Save the last visible address as the theme's LED count. A splitter can make several fans show the same address, so this finds independently controllable positions on the signal rather than every physical LED.
-- **Power events:** The service sends an off command before shutdown, sleep, or hibernation and reconnects after wake. Hardware can reset to its own effect during a power transition; the service retries its connection after wake.
+- **Find LED count:** Click **Find LED count...** to light one address at a time. Save the last visible address as the LED count for themes. A splitter can make several fans show the same address, so this finds independently controllable positions on the signal rather than every physical LED.
 
-The service writes its latest status to `%ProgramData%\RGBControl\service-status.txt` and stores theme settings in `%ProgramData%\RGBControl\theme.ini`. The status confirms that USB reports were sent; it cannot confirm what the LEDs visibly display.
+The service writes its latest status to `%ProgramData%\RGBControl\service-status.txt`. This confirms USB reports were sent; it cannot confirm what the LEDs visibly display. In app-only mode, no service status file is updated.
 
-The cooler's lighting connector must use a compatible 3-pin 5V D_LED header. The [Gigabyte motherboard manual](https://download.gigabyte.com/FileList/Manual/mb_manual_b760m-series_1004_e.pdf) distinguishes this from a 12V LED_C header. Fan power is separate. RGBControl controls lighting, not fan or pump speed.
+The cooler's lighting connector must use a compatible 3-pin 5V D_LED header. The [Gigabyte motherboard manual](https://download.gigabyte.com/FileList/Manual/mb_manual_b760m-series_1004_e.pdf) distinguishes this from a 12V LED_C header. Fan power is separate.
 
 ## Build from source
 
-On Windows, clone or download the source and double-click `build_windows.bat`. It uses the .NET Framework C# compiler included with Windows to build `RGBControl.exe` from the three C# source files. Run `install_service.bat` to build and install the service from source. `run_windows.bat` builds and launches the desktop app without installing the service.
+On Windows, run `build_windows.bat` to compile `RGBControl.exe` using the .NET Framework C# compiler. Install [Inno Setup 6](https://jrsoftware.org/inno-setup/downloads) and compile `RGBControl.iss` with `ISCC.exe` to make the single-file installer. The GitHub Actions workflow builds both on a Windows runner, verifies service and app-only installation, and publishes `RGBControl-Setup-0.2.0.exe` as the release asset. The local `RGBControl.exe` and generated installer are ignored by Git.
 
-A push to `main` checks that the Windows build succeeds and publishes the first `v0.1.0` release if it does not exist yet. Later version tags build a fresh executable and publish `RGBControl-Windows.zip` through GitHub Actions. The local `RGBControl.exe` is ignored by Git and is never used for the release build.
+Legacy `install_service.bat` and `uninstall_service.bat` remain in source for existing users of the previous ZIP release. New users should use the installer executable.
 
 ## Protocol and license
 
-The USB report format follows [Gigabyte RGB Fusion 2 reverse-engineering notes](https://github.com/aynX-skii/GigabyteRGBController/blob/main/docs/gcc-reverse-engineering.md) and the [documented per-LED packet structure](https://gitlab.com/CalcProgrammer1/OpenRGB/-/raw/master/Controllers/GigabyteRGBFusion2USBController/GigabyteRGBFusion2USBController.cpp). These are protocol references; RGBControl does not use OpenRGB code or libraries at runtime. Device discovery uses the [Windows HID APIs](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/finding-and-opening-a-hid-collection).
+The USB report format follows [Gigabyte RGB Fusion 2 reverse-engineering notes](https://github.com/aynX-skii/GigabyteRGBController/blob/main/docs/gcc-reverse-engineering.md) and the [documented per-LED packet structure](https://gitlab.com/CalcProgrammer1/OpenRGB/-/raw/master/Controllers/GigabyteRGBFusion2USBController/GigabyteRGBFusion2USBController.cpp). These are protocol references; RGBControl does not depend on OpenRGB at runtime. Device discovery uses the [Windows HID APIs](https://learn.microsoft.com/en-us/windows-hardware/drivers/hid/finding-and-opening-a-hid-collection).
 
 Source code is available under the [MIT License](LICENSE).
