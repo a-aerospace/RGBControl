@@ -1,0 +1,11 @@
+RGBControl.exe
+*.pdb
+*.zip
+theme.ini
+service-status.txt
+*.log
+*.tmp
+.vs/
+bin/
+obj/
+.local/
