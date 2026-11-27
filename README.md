@@ -1,6 +1,6 @@
 # RGBControl
 
-![RGBControl rainbow fan icon](assets/RGBControl.svg)
+<img src="assets/RGBControl.svg" alt="RGBControl rainbow fan icon" width="96">
 
 RGBControl controls lighting on compatible Gigabyte motherboard USB RGB controllers. The Windows app can set static colors, address individual LEDs on D_LED headers, and play moving themes without OpenRGB, RGB Fusion, Python, a third-party driver, or an account. It makes no network requests.
 
