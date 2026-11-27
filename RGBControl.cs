@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
@@ -48,6 +49,16 @@ namespace RGBControl
         private readonly Button applyPattern = new Button();
         private readonly Button themes = new Button();
         private readonly Button findLeds = new Button();
+        private readonly System.Windows.Forms.Timer localThemeTimer = new System.Windows.Forms.Timer();
+        private ThemeSettings localTheme;
+        private int localFrame;
+        private double localCometPosition;
+        private long localLastTick;
+        private long nextLocalDirectRefresh;
+        private long nextServiceCheck;
+        private long nextLocalRecovery;
+        private int localRecoveryRemaining;
+        private bool resumeLocalTheme;
 
         internal MainForm()
         {
@@ -170,11 +181,14 @@ namespace RGBControl
             Controls.Add(applyPattern);
             themes.SetBounds(190, 595, 150, 30);
             themes.Text = "Dynamic themes...";
-            themes.Click += delegate { using (ThemeForm form = new ThemeForm()) form.ShowDialog(this); };
+            themes.Click += delegate
+            {
+                using (ThemeForm form = new ThemeForm(PlaySavedThemeLocally)) form.ShowDialog(this);
+            };
             Controls.Add(themes);
             findLeds.SetBounds(350, 595, 180, 30);
             findLeds.Text = "Find LED count...";
-            findLeds.Click += delegate { using (LedScanForm form = new LedScanForm(controller)) form.ShowDialog(this); };
+            findLeds.Click += delegate { ScanLeds(); };
             Controls.Add(findLeds);
 
             status.SetBounds(20, 635, 520, 45);
@@ -182,6 +196,8 @@ namespace RGBControl
             Controls.Add(status);
             SetConnected(false);
             UpdatePreview();
+            localThemeTimer.Tick += delegate { AnimateLocalTheme(); };
+            Shown += delegate { PlaySavedThemeLocally(); };
         }
 
         private void AddLabel(string text, int x, int y, int width, int height = 25)
@@ -260,6 +276,8 @@ namespace RGBControl
 
         private void Connect()
         {
+            bool resumeAnimation = localThemeTimer.Enabled;
+            localThemeTimer.Stop();
             connect.Enabled = false;
             Cursor = Cursors.WaitCursor;
             try
@@ -281,13 +299,125 @@ namespace RGBControl
             {
                 connect.Enabled = true;
                 Cursor = Cursors.Default;
+                if (resumeAnimation && controller != null) localThemeTimer.Start();
             }
+        }
+
+        private void StopLocalTheme()
+        {
+            localThemeTimer.Stop();
+            localTheme = null;
+        }
+
+        private void PlaySavedThemeLocally()
+        {
+            StopLocalTheme();
+            if (ThemeSettings.IsServiceRunning()) return;
+            try
+            {
+                ThemeSettings settings = ThemeSettings.Load();
+                if (settings.Theme == "Manual") return;
+                if (controller == null) Connect();
+                if (controller == null) return;
+                if (settings.Theme == "Off")
+                {
+                    controller.SetColor(-1, Color.Black, 0);
+                    status.Text = "Lights off. RGB Control is running without the background service.";
+                    return;
+                }
+                localTheme = settings;
+                localFrame = 0;
+                localCometPosition = 0;
+                localLastTick = Stopwatch.GetTimestamp();
+                nextLocalDirectRefresh = 0;
+                nextServiceCheck = 0;
+                nextLocalRecovery = localLastTick + 3L * Stopwatch.Frequency;
+                localRecoveryRemaining = 2;
+                localThemeTimer.Interval = settings.Theme == "Comet" ? 25 : 190 - settings.Speed * 14;
+                localThemeTimer.Start();
+                status.Text = "Playing " + settings.Theme + " while RGB Control is open.";
+                AnimateLocalTheme();
+            }
+            catch (Exception error) { status.Text = error.Message; }
+        }
+
+        private void AnimateLocalTheme()
+        {
+            if (!localThemeTimer.Enabled || localTheme == null) return;
+            try
+            {
+                long now = Stopwatch.GetTimestamp();
+                if (now >= nextServiceCheck)
+                {
+                    nextServiceCheck = now + 3L * Stopwatch.Frequency;
+                    if (ThemeSettings.IsServiceRunning())
+                    {
+                        StopLocalTheme();
+                        status.Text = "Background service is running the saved theme.";
+                        return;
+                    }
+                }
+                if (localRecoveryRemaining > 0 && now >= nextLocalRecovery)
+                {
+                    if (controller != null) controller.Dispose();
+                    controller = null;
+                    SetConnected(false);
+                    localRecoveryRemaining--;
+                    if (localRecoveryRemaining > 0)
+                        nextLocalRecovery = now + 7L * Stopwatch.Frequency;
+                }
+                if (controller == null) Connect();
+                if (controller == null)
+                {
+                    StopLocalTheme();
+                    return;
+                }
+                double seconds = Math.Min(0.25, (now - localLastTick) / (double)Stopwatch.Frequency);
+                localLastTick = now;
+                if (localTheme.Theme == "Comet")
+                    localCometPosition = (localCometPosition + seconds * (1.2 + localTheme.Speed * 0.7)) %
+                        localTheme.LedCount;
+                Color[] pixels = RgbLightingService.MakeFrame(localTheme, localFrame, localCometPosition);
+                bool refresh = now >= nextLocalDirectRefresh;
+                controller.SetPixels(localTheme.Header, pixels, "Auto", localTheme.Brightness, refresh);
+                if (refresh) nextLocalDirectRefresh = Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency;
+                localFrame++;
+            }
+            catch (Exception error)
+            {
+                StopLocalTheme();
+                if (controller != null) controller.Dispose();
+                controller = null;
+                device.Text = "No controller connected";
+                SetConnected(false);
+                status.Text = "Theme stopped: " + error.Message;
+            }
+        }
+
+        private void ScanLeds()
+        {
+            bool resumeAnimation = localThemeTimer.Enabled;
+            StopLocalTheme();
+            ThemeSettings previous = null;
+            try
+            {
+                if (resumeAnimation) previous = ThemeSettings.Load();
+                using (LedScanForm form = new LedScanForm(controller)) form.ShowDialog(this);
+                if (previous != null)
+                {
+                    previous.LedCount = ThemeSettings.Load().LedCount;
+                    previous.Save();
+                    PlaySavedThemeLocally();
+                }
+            }
+            catch (Exception error) { status.Text = error.Message; }
         }
 
         private void ApplyColor()
         {
             try
             {
+                StopLocalTheme();
                 ThemeSettings.PauseServiceForManual();
                 controller.SetColor(channel.SelectedIndex - 1, ParseColor(hex.Text), brightness.Value);
                 status.Text = "Color command sent. Check the selected lights.";
@@ -299,6 +429,7 @@ namespace RGBControl
         {
             try
             {
+                StopLocalTheme();
                 ThemeSettings.PauseServiceForManual();
                 controller.SetColor(channel.SelectedIndex - 1, Color.Black, 0);
                 status.Text = "Off command sent.";
@@ -310,6 +441,7 @@ namespace RGBControl
         {
             try
             {
+                StopLocalTheme();
                 ThemeSettings.PauseServiceForManual();
                 controller.SetPattern(strip.SelectedIndex, patternColors, (int)ledCount.Value,
                     patternMode.SelectedIndex == 1, colorOrder.Text, brightness.Value);
@@ -320,8 +452,34 @@ namespace RGBControl
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            StopLocalTheme();
+            localThemeTimer.Dispose();
             if (controller != null) controller.Dispose();
             base.OnFormClosed(e);
+        }
+
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x218)
+            {
+                int powerEvent = message.WParam.ToInt32();
+                if (powerEvent == 0x4 && localThemeTimer.Enabled)
+                {
+                    resumeLocalTheme = true;
+                    StopLocalTheme();
+                    try { if (controller != null) controller.SetColor(-1, Color.Black, 0); }
+                    catch { }
+                    if (controller != null) controller.Dispose();
+                    controller = null;
+                    SetConnected(false);
+                }
+                else if ((powerEvent == 0x7 || powerEvent == 0x12) && resumeLocalTheme)
+                {
+                    resumeLocalTheme = false;
+                    BeginInvoke(new Action(PlaySavedThemeLocally));
+                }
+            }
+            base.WndProc(ref message);
         }
     }
 

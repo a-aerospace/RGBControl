@@ -1,0 +1,22 @@
+RGBControl controls lighting on compatible Gigabyte motherboard USB RGB controllers.
+It can set a fixed color, show several colors at once, and play moving themes.
+
+Hardware access
+  * Reads the USB lighting controller's identity and color calibration.
+  * Sends lighting commands to that controller and its connected RGB headers.
+  * Can turn those connected lights on or off. It does not control fan or pump speed.
+
+Data and network access
+  * Saves your theme settings and the latest service status in ProgramData\RGBControl.
+  * Does not connect to the internet, collect telemetry, or require an account.
+
+Installation choice
+  * Background service: starts with Windows, plays themes after you close the app,
+    and handles sleep, hibernation, and shutdown lighting events. The service runs
+    as Windows LocalSystem so it can access the controller before sign-in.
+  * App only: themes play while the RGB Control window is open. No background
+    service is installed or started.
+
+The app is installed in Program Files\RGBControl. A Start menu shortcut is always
+created. You can choose a desktop shortcut on the next page. Windows Settings
+will list RGBControl so you can uninstall it later.

@@ -1,6 +1,7 @@
 RGBControl.exe
 *.pdb
 *.zip
+dist/
 theme.ini
 service-status.txt
 *.log
