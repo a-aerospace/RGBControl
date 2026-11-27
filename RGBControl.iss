@@ -20,6 +20,7 @@ LicenseFile=LICENSE
 InfoBeforeFile=installer-info.txt
 Uninstallable=yes
 CreateUninstallRegKey=yes
+UninstallDisplayName=RGBControl
 UninstallDisplayIcon={app}\RGBControl.exe
 CloseApplications=yes
 RestartApplications=no
