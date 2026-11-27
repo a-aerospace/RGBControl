@@ -30,7 +30,7 @@ jobs:
           if (-not $iscc) { throw 'Inno Setup 6 compiler was not found on the Windows runner.' }
           & $iscc RGBControl.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-          if (-not (Test-Path 'dist\RGBControl-Setup-0.2.2.exe')) { throw 'Installer executable was not created.' }
+          if (-not (Test-Path 'dist\RGBControl-Setup-0.2.3.exe')) { throw 'Installer executable was not created.' }
       - name: Verify embedded icons
         shell: pwsh
         run: |
@@ -57,11 +57,11 @@ jobs:
             } finally { $icon.Dispose() }
           }
           Assert-ColorfulIcon 'RGBControl.exe'
-          Assert-ColorfulIcon 'dist\RGBControl-Setup-0.2.2.exe'
+          Assert-ColorfulIcon 'dist\RGBControl-Setup-0.2.3.exe'
       - name: Verify service and app-only installation
         shell: pwsh
         run: |
-          $setup = (Resolve-Path 'dist\RGBControl-Setup-0.2.2.exe').Path
+          $setup = (Resolve-Path 'dist\RGBControl-Setup-0.2.3.exe').Path
           $startMenu = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\RGB Control.lnk'
           $desktop = Join-Path $env:PUBLIC 'Desktop\RGB Control.lnk'
           $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
@@ -93,8 +93,8 @@ jobs:
           Run-Uninstall
       - uses: actions/upload-artifact@v4
         with:
-          name: RGBControl-Setup-0.2.2
-          path: dist/RGBControl-Setup-0.2.2.exe
+          name: RGBControl-Setup-0.2.3
+          path: dist/RGBControl-Setup-0.2.3.exe
           if-no-files-found: error
 
   release:
@@ -106,7 +106,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: RGBControl-Setup-0.2.2
+          name: RGBControl-Setup-0.2.3
           path: dist
       - name: Publish GitHub release
         env:
@@ -114,7 +114,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Setup-0.2.2.exe --verify-tag --generate-notes
-          elif ! gh release view v0.2.2 >/dev/null 2>&1; then
-            gh release create v0.2.2 dist/RGBControl-Setup-0.2.2.exe --target "$GITHUB_SHA" --generate-notes
+            gh release create "$GITHUB_REF_NAME" dist/RGBControl-Setup-0.2.3.exe --verify-tag --generate-notes
+          elif ! gh release view v0.2.3 >/dev/null 2>&1; then
+            gh release create v0.2.3 dist/RGBControl-Setup-0.2.3.exe --target "$GITHUB_SHA" --generate-notes
           fi

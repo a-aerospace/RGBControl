@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading;
@@ -98,6 +99,35 @@ namespace RGBControl
             settings.Save();
             if (serviceWasRunning) Thread.Sleep(350);
         }
+    }
+
+    internal sealed class FrameTimerResolution : IDisposable
+    {
+        // Windows timer precision is raised only while a dynamic theme is active.
+        private bool active;
+        private bool requested;
+
+        [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+        private static extern uint TimeBeginPeriod(uint milliseconds);
+
+        [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+        private static extern uint TimeEndPeriod(uint milliseconds);
+
+        internal void Start()
+        {
+            if (requested) return;
+            requested = true;
+            active = TimeBeginPeriod(1) == 0;
+        }
+
+        internal void Stop()
+        {
+            if (active) TimeEndPeriod(1);
+            active = false;
+            requested = false;
+        }
+
+        public void Dispose() { Stop(); }
     }
 
     internal sealed class ThemeForm : Form
@@ -283,7 +313,7 @@ namespace RGBControl
         {
             running = true;
             suspended = false;
-            ScheduleRecovery();
+            ScheduleRecovery(false);
             WriteStatus("Service started; connecting to the RGB controller.");
             worker = new Thread(Animate);
             worker.IsBackground = true;
@@ -316,7 +346,7 @@ namespace RGBControl
                 powerStatus == PowerBroadcastStatus.ResumeCritical ||
                 powerStatus == PowerBroadcastStatus.ResumeSuspend)
             {
-                ScheduleRecovery();
+                ScheduleRecovery(true);
                 suspended = false;
                 WriteStatus("Wake notification received; reconnecting now and again after USB settles.");
             }
@@ -361,15 +391,16 @@ namespace RGBControl
             }
         }
 
-        private void ScheduleRecovery()
+        private void ScheduleRecovery(bool afterWake)
         {
             lock (gate)
             {
                 if (controller != null) controller.Dispose();
                 controller = null;
-                recoveryReopensRemaining = 2;
+                recoveryReopensRemaining = afterWake ? 2 : 0;
                 recoveryReopensCompleted = 0;
-                nextRecoveryReopen = Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency;
+                nextRecoveryReopen = afterWake
+                    ? Stopwatch.GetTimestamp() + 3L * Stopwatch.Frequency : 0;
             }
         }
 
@@ -382,19 +413,26 @@ namespace RGBControl
             long fpsWindowStart = lastTick;
             int framesInWindow = 0;
             double measuredFps = 0;
+            double longestGapMilliseconds = 0;
+            double measuredLongestGapMilliseconds = 0;
+            long previousFrameSentAt = 0;
             ThemeSettings settings = null;
             long nextSettingsRead = 0;
             long nextDirectRefresh = 0;
             string lastDirectRefresh = "pending";
             string lastEffectReset = "pending";
+            using (FrameTimerResolution timerResolution = new FrameTimerResolution())
             while (running)
             {
                 if (suspended)
                 {
+                    timerResolution.Stop();
                     lastTick = Stopwatch.GetTimestamp();
                     fpsWindowStart = lastTick;
                     framesInWindow = 0;
                     measuredFps = 0;
+                    longestGapMilliseconds = measuredLongestGapMilliseconds = 0;
+                    previousFrameSentAt = 0;
                     Thread.Sleep(100);
                     continue;
                 }
@@ -408,6 +446,7 @@ namespace RGBControl
                     }
                     catch (Exception error)
                     {
+                        timerResolution.Stop();
                         WriteStatus("Could not read theme settings: " + error.Message);
                         Thread.Sleep(500);
                         continue;
@@ -416,10 +455,13 @@ namespace RGBControl
 
                 if (settings.Theme == "Manual")
                 {
+                    timerResolution.Stop();
                     lastTick = Stopwatch.GetTimestamp();
                     fpsWindowStart = lastTick;
                     framesInWindow = 0;
                     measuredFps = 0;
+                    longestGapMilliseconds = measuredLongestGapMilliseconds = 0;
+                    previousFrameSentAt = 0;
                     ReleaseController();
                     WriteStatus("Manual mode. The desktop window controls the LEDs.");
                     sentOff = false;
@@ -428,10 +470,13 @@ namespace RGBControl
                 }
                 if (settings.Theme == "Off")
                 {
+                    timerResolution.Stop();
                     lastTick = Stopwatch.GetTimestamp();
                     fpsWindowStart = lastTick;
                     framesInWindow = 0;
                     measuredFps = 0;
+                    longestGapMilliseconds = measuredLongestGapMilliseconds = 0;
+                    previousFrameSentAt = 0;
                     if (!sentOff)
                     {
                         sentOff = DarkenAndClose();
@@ -441,6 +486,7 @@ namespace RGBControl
                     continue;
                 }
                 sentOff = false;
+                timerResolution.Start();
 
                 try
                 {
@@ -478,10 +524,16 @@ namespace RGBControl
                             sentFrame = true;
                             framesInWindow++;
                             long frameSentAt = Stopwatch.GetTimestamp();
+                            if (previousFrameSentAt != 0)
+                                longestGapMilliseconds = Math.Max(longestGapMilliseconds,
+                                    (frameSentAt - previousFrameSentAt) * 1000.0 / Stopwatch.Frequency);
+                            previousFrameSentAt = frameSentAt;
                             if (frameSentAt - fpsWindowStart >= Stopwatch.Frequency)
                             {
                                 measuredFps = framesInWindow * (double)Stopwatch.Frequency /
                                     (frameSentAt - fpsWindowStart);
+                                measuredLongestGapMilliseconds = longestGapMilliseconds;
+                                longestGapMilliseconds = 0;
                                 framesInWindow = 0;
                                 fpsWindowStart = frameSentAt;
                             }
@@ -496,7 +548,10 @@ namespace RGBControl
                                 " with " + settings.LedCount + " LED positions. Controller effects cleared at " +
                                 lastEffectReset + "; direct mode refreshed at " + lastDirectRefresh +
                                 ". Sent " + measuredFps.ToString("F1", CultureInfo.InvariantCulture) + " fps" +
-                                ". Recovery reconnects " + recoveryReopensCompleted + "/2. " +
+                                "; longest frame gap " +
+                                measuredLongestGapMilliseconds.ToString("F0", CultureInfo.InvariantCulture) + " ms" +
+                                ". Recovery reconnects " + recoveryReopensCompleted + "/" +
+                                (recoveryReopensCompleted + recoveryReopensRemaining) + ". " +
                                 "USB reports sent; LED output is not verified.");
                         }
                     }
@@ -507,6 +562,7 @@ namespace RGBControl
                 }
                 catch (Exception error)
                 {
+                    timerResolution.Stop();
                     WriteStatus("Could not send RGB frame: " + error.Message);
                     ReleaseController();
                     Thread.Sleep(1000);
@@ -541,11 +597,14 @@ namespace RGBControl
                 }
                 else if (settings.Theme == "Comet")
                 {
-                    double distance = (cometPosition - i + count) % count;
-                    if (distance > count / 2.0) distance -= count;
-                    double width = distance >= 0 ? 1.7 : 0.65;
-                    double glow = 0.01 + 0.99 * Math.Exp(-0.5 * Math.Pow(distance / width, 2));
-                    pixels[i] = ScaleColor(settings.ThemeColor, glow);
+                    double glow = 0;
+                    for (int wrap = -1; wrap <= 1; wrap++)
+                    {
+                        double distance = cometPosition - i + wrap * count;
+                        double width = distance >= 0 ? 1.7 : 0.65;
+                        glow = Math.Max(glow, Math.Exp(-0.5 * Math.Pow(distance / width, 2)));
+                    }
+                    pixels[i] = ScaleColor(settings.ThemeColor, 0.01 + 0.99 * glow);
                 }
                 else if (settings.Theme == "Ocean")
                 {
